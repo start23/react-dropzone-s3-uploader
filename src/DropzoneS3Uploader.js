@@ -51,7 +51,7 @@ export default class DropzoneS3Uploader extends React.Component {
     passChildrenProps: true,
     s3Url: '',
     isImage: fileName => fileName && fileName.match(/\.(jpeg|jpg|gif|png|svg)/i),
-    notDropzoneProps: ['onFinish', 'childrenDropzone', 'containerStyle', 'placeChildrenOutsideDropArea', 's3Url', 'fileName', 'host', 'upload', 'isImage', 'notDropzoneProps'],
+    notDropzoneProps: ['onFinish', 'childrenDropzone', 'containerStyle', 'placeChildrenOutsideDropArea', 's3Url', 'fileName', 'host', 'upload', 'isImage', 'notDropzoneProps', 'waitToUpload'],
     style: {
       width: 200,
       height: 200,
@@ -83,32 +83,48 @@ export default class DropzoneS3Uploader extends React.Component {
         file: {},
       })
     }
-    this.state = {uploadedFiles}
+    this.state = { uploadedFiles, pendingUploads: [] }
   }
 
   componentWillMount = () => this.setUploaderOptions(this.props)
-  componentWillReceiveProps = props => this.setUploaderOptions(props)
+  componentWillReceiveProps = nextProps => {
+    if (nextProps.upload !== this.props.upload) {
+      this.setUploaderOptions(nextProps);
+    }
+
+    if (this.props.waitToUpload && !nextProps.waitToUpload) {
+      const uploaderOptions = this.getUploaderOptions(nextProps);
+      this.uploadPendingFiles(uploaderOptions);
+    }
+  }
+
+  uploadPendingFiles = (uploaderOptions) => {
+    this.state.pendingUploads.forEach(files => new S3Upload({ files, ...uploaderOptions }));
+  }
+
+  getUploaderOptions = props => {
+    return Object.assign({
+      s3path: '',
+      contentDisposition: 'auto',
+      onFinishS3Put: this.handleFinish,
+      onProgress: this.handleProgress,
+      onError: this.handleError,
+    }, props.upload);
+  }
 
   setUploaderOptions = props => {
-    this.setState({
-      uploaderOptions: Object.assign({
-        s3path: '',
-        contentDisposition: 'auto',
-        onFinishS3Put: this.handleFinish,
-        onProgress: this.handleProgress,
-        onError: this.handleError,
-      }, props.upload),
-    })
+    const uploaderOptions = this.getUploaderOptions(props);
+    this.setState(Object.assign({}, this.state, { uploaderOptions }));
   }
 
   handleProgress = (progress, textState, file) => {
     this.props.onProgress && this.props.onProgress(progress, textState, file)
-    this.setState({progress})
+    this.setState(Object.assign({}, this.state, { progress }));
   }
 
   handleError = (err, file) => {
     this.props.onError && this.props.onError(err, file)
-    this.setState({error: err, progress: null})
+    this.setState(Object.assign({}, this.state, { error: err, progress: null }));
   }
 
   handleFinish = (info, file) => {
@@ -122,16 +138,29 @@ export default class DropzoneS3Uploader extends React.Component {
 
     this.props.onFinish && this.props.onFinish(uploadedFile)
 
-    this.setState({uploadedFiles, error: null, progress: null})
+    this.setState(Object.assign({}, this.state, { uploadedFiles, error: null, progress: null }));
   }
 
   handleDrop = (files, rejectedFiles) => {
-    this.setState({uploadedFiles: [], error: null, progress: null})
+    const pendingUploads = [].concat(this.state.pendingUploads);
     const options = {
       files,
       ...this.state.uploaderOptions,
+    };
+
+    if (this.props.waitToUpload) {
+      pendingUploads.push(files);
+    } else {
+      new S3Upload(options) // eslint-disable-line
     }
-    new S3Upload(options) // eslint-disable-line
+
+    this.setState(Object.assign({}, this.state, {
+      uploadedFiles: [],
+      error: null,
+      progress: null,
+      pendingUploads,
+    }));
+
     this.props.onDrop && this.props.onDrop(files, rejectedFiles)
   }
 
