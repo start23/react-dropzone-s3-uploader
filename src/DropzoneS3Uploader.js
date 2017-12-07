@@ -3,6 +3,31 @@ import PropTypes from 'prop-types'
 import S3Upload from 'react-s3-uploader/s3upload'
 import Dropzone from 'react-dropzone'
 
+// https://github.com/moroshko/shallow-equal/blob/master/src/objects.js
+const shallowEqual = (objA, objB) => {
+  if (objA === objB) {
+    return true;
+  }
+
+  const aKeys = Object.keys(objA);
+  const bKeys = Object.keys(objB);
+  const len = aKeys.length;
+
+  if (bKeys.length !== len) {
+    return false;
+  }
+
+  for (let i = 0; i < len; i++) {
+    const key = aKeys[i];
+
+    if (objA[key] !== objB[key]) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 export default class DropzoneS3Uploader extends React.Component {
 
   static propTypes = {
@@ -51,7 +76,7 @@ export default class DropzoneS3Uploader extends React.Component {
     passChildrenProps: true,
     s3Url: '',
     isImage: fileName => fileName && fileName.match(/\.(jpeg|jpg|gif|png|svg)/i),
-    notDropzoneProps: ['onFinish', 'childrenDropzone', 'containerStyle', 'placeChildrenOutsideDropArea', 's3Url', 'fileName', 'host', 'upload', 'isImage', 'notDropzoneProps', 'waitToUpload'],
+    notDropzoneProps: ['onFinish', 'childrenDropzone', 'containerStyle', 'placeChildrenOutsideDropArea', 's3Url', 'fileName', 'host', 'upload', 'isImage', 'notDropzoneProps', 'waitToUpload', 'onDrop'],
     style: {
       width: 200,
       height: 200,
@@ -88,7 +113,7 @@ export default class DropzoneS3Uploader extends React.Component {
 
   componentWillMount = () => this.setUploaderOptions(this.props)
   componentWillReceiveProps = nextProps => {
-    if (nextProps.upload !== this.props.upload) {
+    if (!shallowEqual(nextProps.upload, this.props.upload)) {
       this.setUploaderOptions(nextProps);
     }
 
